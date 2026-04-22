@@ -446,7 +446,7 @@ std::expected<rapidjson::Document,int> load_json(const char*  json_path)
 
 int main()
 {
-    auto d = load_json("../licenses.json");
+    auto d = load_json("../data/licenses.json");
     if (!d.has_value())
     {
         std::cout << "解析licenses.json错误" << std::endl;
@@ -473,8 +473,67 @@ int main()
     outFile.write(d_json.c_str(),d_json.size());
     outFile.close();
     std::cout<<"Saved new license to idapro.hexlic"<<std::endl;
-    patch("ida.dll");
-    patch("ida32.dll");
+
+    namespace fs = std::filesystem;
+    std::vector<std::string> targets;
+
+#if defined(_WIN32)
+    targets.push_back("ida.dll");
+    targets.push_back("ida32.dll");
+    for (const auto& root : {"C:/Program Files", "C:/Program Files (x86)"}) {
+        std::error_code ec;
+        if (!fs::exists(root, ec)) continue;
+        for (const auto& entry : fs::directory_iterator(root, ec)) {
+            if (!entry.is_directory()) continue;
+            const auto name = entry.path().filename().string();
+            if (name.rfind("IDA", 0) != 0) continue;
+            targets.push_back((entry.path() / "ida.dll").string());
+            targets.push_back((entry.path() / "ida32.dll").string());
+        }
+    }
+#elif defined(__APPLE__)
+    targets.push_back("libida.dylib");
+    targets.push_back("libida32.dylib");
+    std::error_code ec;
+    if (fs::exists("/Applications", ec)) {
+        for (const auto& entry : fs::directory_iterator("/Applications", ec)) {
+            if (!entry.is_directory()) continue;
+            const auto name = entry.path().filename().string();
+            // Match any "IDA*.app": "IDA Professional 9.3.app", "IDA Pro 9.0.app", etc.
+            if (name.rfind("IDA", 0) != 0 || !name.ends_with(".app")) continue;
+            auto macos = entry.path() / "Contents" / "MacOS";
+            targets.push_back((macos / "libida.dylib").string());
+            targets.push_back((macos / "libida32.dylib").string());
+        }
+    }
+#else // Linux / other Unix
+    targets.push_back("libida.so");
+    targets.push_back("libida32.so");
+    if (const char* home = std::getenv("HOME")) {
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(home, ec)) {
+            if (!entry.is_directory()) continue;
+            const auto name = entry.path().filename().string();
+            if (name.rfind("idapro", 0) != 0) continue;
+            targets.push_back((entry.path() / "libida.so").string());
+            targets.push_back((entry.path() / "libida32.so").string());
+        }
+    }
+#endif
+
+    for (const auto& t : targets) patch(t);
+
+#if defined(__APPLE__)
+    std::cout << "On macOS, re-sign the app after patching, e.g.:\n"
+              << "  codesign --force --deep --sign - "
+                 "\"/Applications/IDA Professional 9.3.app\"\n";
+#endif
+
+#if defined(_WIN32)
     system("pause");
+#else
+    std::cout << "Press Enter to exit..." << std::flush;
+    std::cin.get();
+#endif
     return 0;
 }
