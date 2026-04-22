@@ -211,20 +211,21 @@ std::string sign_hexlic(const std::string& json_data)
     std::printf("\n");
     return bytes_to_hex(encrypted);
 }
-void patch(const std::string& filename)
+bool patch(const std::string& filename)
 {
     std::ifstream f(filename, std::ios::binary);
 
     if (!f)
     {
         std::cout << "Skip: " << filename << " - didn't find\n";
-        return;
+        return false;
     }
 
     std::vector<uint8_t> data(
         (std::istreambuf_iterator<char>(f)),
         std::istreambuf_iterator<char>()
     );
+    f.close();
 
     auto original = hex_to_bytes("EDFD425CF978");
     auto patched  = hex_to_bytes("EDFD42CBF978");
@@ -234,7 +235,7 @@ void patch(const std::string& filename)
     if (it == data.end())
     {
         std::cout << "Patch: " << filename << " - doesn't contain original modulus\n";
-        return;
+        return false;
     }
 
     std::copy(patched.begin(), patched.end(), it);
@@ -243,6 +244,110 @@ void patch(const std::string& filename)
     out.write((char*)data.data(), data.size());
 
     std::cout << "Patch: " << filename << " - OK\n";
+    return true;
+}
+
+namespace fs = std::filesystem;
+
+static fs::path normalize_install_dir(const fs::path& p)
+{
+#if defined(__APPLE__)
+    if (p.extension() == ".app")
+        return p / "Contents" / "MacOS";
+#endif
+    return p;
+}
+
+static void walk_strings(const rapidjson::Value& v, std::vector<std::string>& out)
+{
+    if (v.IsString())
+        out.emplace_back(v.GetString(), v.GetStringLength());
+    else if (v.IsObject())
+        for (auto& m : v.GetObject()) walk_strings(m.value, out);
+    else if (v.IsArray())
+        for (auto& e : v.GetArray()) walk_strings(e, out);
+}
+
+// Read ida-config.json (in IDAUSR) and add any string values that resolve to
+// existing directories. Catches custom install paths chosen at install time.
+static void collect_dirs_from_config(const fs::path& cfg, std::vector<fs::path>& out)
+{
+    std::ifstream f(cfg, std::ios::binary);
+    if (!f) return;
+    std::string content((std::istreambuf_iterator<char>(f)),
+                        std::istreambuf_iterator<char>());
+    rapidjson::Document d;
+    if (d.Parse<rapidjson::kParseCommentsFlag>(content.c_str()).HasParseError()) return;
+
+    std::vector<std::string> strings;
+    walk_strings(d, strings);
+
+    std::error_code ec;
+    for (auto& s : strings)
+        if (fs::is_directory(s, ec)) out.emplace_back(s);
+}
+
+static std::vector<fs::path> find_ida_install_dirs()
+{
+    std::vector<fs::path> dirs;
+    std::error_code ec;
+
+    dirs.emplace_back(".");
+
+    if (const char* idadir = std::getenv("IDADIR"); idadir && *idadir)
+        dirs.emplace_back(idadir);
+
+    auto scan = [&](const fs::path& root, auto&& pred) {
+        if (!fs::exists(root, ec)) return;
+        for (const auto& e : fs::directory_iterator(root, ec)) {
+            if (!e.is_directory(ec)) continue;
+            if (pred(e.path().filename().string()))
+                dirs.push_back(e.path());
+        }
+    };
+
+#if defined(_WIN32)
+    auto pred = [](const std::string& n) { return n.rfind("IDA", 0) == 0; };
+    scan("C:/Program Files", pred);
+    scan("C:/Program Files (x86)", pred);
+    if (const char* pf   = std::getenv("ProgramFiles"))      scan(pf,   pred);
+    if (const char* pf86 = std::getenv("ProgramFiles(x86)")) scan(pf86, pred);
+#elif defined(__APPLE__)
+    scan("/Applications", [](const std::string& n) {
+        return n.rfind("IDA", 0) == 0 && n.ends_with(".app");
+    });
+#else
+    auto pred = [](const std::string& n) {
+        return n.rfind("ida", 0) == 0 || n.rfind("IDA", 0) == 0;
+    };
+    scan("/opt", pred);
+    if (const char* home = std::getenv("HOME")) scan(home, pred);
+#endif
+
+    if (const char* home = std::getenv("HOME"))
+        collect_dirs_from_config(fs::path(home) / ".idapro" / "ida-config.json", dirs);
+#if defined(_WIN32)
+    if (const char* appdata = std::getenv("APPDATA"))
+        collect_dirs_from_config(
+            fs::path(appdata) / "Hex-Rays" / "IDA Pro" / "ida-config.json", dirs);
+#endif
+
+    for (auto& d : dirs) d = normalize_install_dir(d);
+    return dirs;
+}
+
+static const std::vector<std::string>& ida_lib_names()
+{
+    static const std::vector<std::string> names = {
+#if defined(_WIN32)
+        "ida.dll", "ida32.dll"
+#elif defined(__APPLE__)
+        "libida.dylib", "libida32.dylib"
+#else
+        "libida.so", "libida32.so"
+#endif
+    };
+    return names;
 }
 
 std::string json_stringify_alphabetical(const rapidjson::Document& doc)
@@ -475,53 +580,26 @@ int main()
     std::cout<<"Saved new license to idapro.hexlic"<<std::endl;
 
     namespace fs = std::filesystem;
-    std::vector<std::string> targets;
 
+    const auto install_dirs = find_ida_install_dirs();
+    const auto& libs = ida_lib_names();
+
+    bool any_patched = false;
+    for (const auto& d : install_dirs)
+        for (const auto& l : libs)
+            if (patch((d / l).string())) any_patched = true;
+
+    if (!any_patched) {
+        std::cout << "\nNo IDA install with the original modulus was patched.\n"
+                  << "Set IDADIR to your install directory and re-run, e.g.:\n"
 #if defined(_WIN32)
-    targets.push_back("ida.dll");
-    targets.push_back("ida32.dll");
-    for (const auto& root : {"C:/Program Files", "C:/Program Files (x86)"}) {
-        std::error_code ec;
-        if (!fs::exists(root, ec)) continue;
-        for (const auto& entry : fs::directory_iterator(root, ec)) {
-            if (!entry.is_directory()) continue;
-            const auto name = entry.path().filename().string();
-            if (name.rfind("IDA", 0) != 0) continue;
-            targets.push_back((entry.path() / "ida.dll").string());
-            targets.push_back((entry.path() / "ida32.dll").string());
-        }
-    }
+                  << "  set IDADIR=C:\\Program Files\\IDA Professional 9.3\n";
 #elif defined(__APPLE__)
-    targets.push_back("libida.dylib");
-    targets.push_back("libida32.dylib");
-    std::error_code ec;
-    if (fs::exists("/Applications", ec)) {
-        for (const auto& entry : fs::directory_iterator("/Applications", ec)) {
-            if (!entry.is_directory()) continue;
-            const auto name = entry.path().filename().string();
-            // Match any "IDA*.app": "IDA Professional 9.3.app", "IDA Pro 9.0.app", etc.
-            if (name.rfind("IDA", 0) != 0 || !name.ends_with(".app")) continue;
-            auto macos = entry.path() / "Contents" / "MacOS";
-            targets.push_back((macos / "libida.dylib").string());
-            targets.push_back((macos / "libida32.dylib").string());
-        }
-    }
-#else // Linux / other Unix
-    targets.push_back("libida.so");
-    targets.push_back("libida32.so");
-    if (const char* home = std::getenv("HOME")) {
-        std::error_code ec;
-        for (const auto& entry : fs::directory_iterator(home, ec)) {
-            if (!entry.is_directory()) continue;
-            const auto name = entry.path().filename().string();
-            if (name.rfind("idapro", 0) != 0) continue;
-            targets.push_back((entry.path() / "libida.so").string());
-            targets.push_back((entry.path() / "libida32.so").string());
-        }
-    }
+                  << "  export IDADIR=\"/Applications/IDA Professional 9.3.app/Contents/MacOS\"\n";
+#else
+                  << "  export IDADIR=/opt/idapro-9.3\n";
 #endif
-
-    for (const auto& t : targets) patch(t);
+    }
 
 #if defined(__APPLE__)
     std::cout << "On macOS, re-sign the app after patching, e.g.:\n"
