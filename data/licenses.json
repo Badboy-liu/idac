@@ -2,7 +2,7 @@
   "header": {"version": 1},
   "payload": {
     "name": "HuanmengX",
-    "email": "idapro9@example.com",
+    "email": "user@example.invalid",
     "licenses": [
       {
         "id": "48-2137-ACAB-99",
@@ -16,7 +16,7 @@
         "start_date": "2024-08-10 00:00:00",
         "end_date": "2083-12-31 23:59:59",
         "issued_on": "2024-08-10 00:00:00",
-        "owner": "Creaked By HuanmengX@outlook.com",
+        "owner": "Placeholder Owner <owner@example.invalid>",
         "add_ons": [],
         "features": []
       }
