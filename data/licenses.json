@@ -1,11 +1,11 @@
 {
   "header": {"version": 1},
   "payload": {
-    "name": "HuanmengX",
+    "name": "Placeholder User",
     "email": "user@example.invalid",
     "licenses": [
       {
-        "id": "48-2137-ACAB-99",
+        "id": "00-0000-0000-00",
         "edition_id": "ida-pro",
         "description": "license",
         "license_type": "named",
@@ -13,9 +13,9 @@
         "product_id": "IDAPRO",
         "product_version": "9.3",
         "seats": 1,
-        "start_date": "2024-08-10 00:00:00",
-        "end_date": "2083-12-31 23:59:59",
-        "issued_on": "2024-08-10 00:00:00",
+        "start_date": "2024-01-01 00:00:00",
+        "end_date": "2099-12-31 23:59:59",
+        "issued_on": "2024-01-01 00:00:00",
         "owner": "Placeholder Owner <owner@example.invalid>",
         "add_ons": [],
         "features": []

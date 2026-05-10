@@ -1,2 +1,42 @@
-.idea
-cmake-build-debug
+# macOS
+.DS_Store
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# CMake build directories
+build/
+cmake-build-*/
+out/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# C/C++ build artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# Python cache files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environment files
+.env
+.env.*

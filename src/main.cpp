@@ -71,7 +71,7 @@ static const std::vector<std::string> DECOMPILER_ADDONS = {
     "HEXARC",   "HEXARC64",
 };
 
-constexpr std::string_view OUTPUT_FILENAME = "idapro.hexlic";
+constexpr std::string_view OUTPUT_FILENAME = "data/idapro.hexlic";
 
 // Tried in order; first one that exists is used as the license template.
 static const std::vector<fs::path> LICENSE_TEMPLATE_PATHS = {

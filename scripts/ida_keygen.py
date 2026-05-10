@@ -12,7 +12,6 @@ license payload and have IDA accept it.
 """
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 import os
@@ -62,33 +61,26 @@ DECOMPILER_ADDONS = (
     "HEXARC", "HEXARC64",
 )
 
-LICENSE_TEMPLATE: dict = {
-    "header": {"version": 1},
-    "payload": {
-        "name": "HuanmengX",
-        "email": "idapro9@example.com",
-        "licenses": [
-            {
-                "id": "48-2137-ACAB-99",
-                "edition_id": "ida-pro",
-                "description": "license",
-                "license_type": "named",
-                "product": "IDA",
-                "product_id": "IDAPRO",
-                "product_version": "9.3",
-                "seats": 1,
-                "start_date": "2024-08-10 00:00:00",
-                "end_date": "2083-12-31 23:59:59",
-                "issued_on": "2024-08-10 00:00:00",
-                "owner": "Creaked By HuanmengX@outlook.com",
-                "add_ons": [],
-                "features": [],
-            }
-        ],
-    },
-}
+# Tried in order; first one that exists is used as the license template.
+LICENSE_TEMPLATE_PATHS: tuple[Path, ...] = (
+    Path("licenses.json"),
+    Path("data/licenses.json"),
+    Path("../data/licenses.json"),
+)
 
-OUTPUT_FILENAME = "idapro.hexlic"
+OUTPUT_FILENAME = "data/idapro.hexlic"
+
+
+def load_license_template() -> dict:
+    for candidate in LICENSE_TEMPLATE_PATHS:
+        try:
+            data = json.loads(candidate.read_bytes())
+        except FileNotFoundError:
+            continue
+        print(f"Loaded license template from {candidate}")
+        return data
+    tried = ", ".join(str(p) for p in LICENSE_TEMPLATE_PATHS)
+    raise FileNotFoundError(f"could not find license template (tried: {tried})")
 
 # ---------------------------------------------------------------------------
 # JSON / addon helpers
@@ -104,11 +96,11 @@ def add_every_decompiler(license_obj: dict) -> None:
     parent_id = license_obj["payload"]["licenses"][0]["id"]
     for i, code in enumerate(DECOMPILER_ADDONS, start=1):
         addons.append({
-            "id": f"48-1337-0000-{i:02}",
+            "id": f"00-0000-0000-{i:02}",
             "code": code,
             "owner": parent_id,
-            "start_date": "2024-08-10 00:00:00",
-            "end_date": "2083-12-31 23:59:59",
+            "start_date": "2024-01-01 00:00:00",
+            "end_date": "2099-12-31 23:59:59",
         })
 
 # ---------------------------------------------------------------------------
@@ -287,7 +279,11 @@ def main() -> int:
         print(f"Unsupported platform: {sysname}", file=sys.stderr)
         return 1
 
-    license_obj = copy.deepcopy(LICENSE_TEMPLATE)
+    try:
+        license_obj = load_license_template()
+    except FileNotFoundError as e:
+        print(e, file=sys.stderr)
+        return 1
     add_every_decompiler(license_obj)
     license_obj["signature"] = sign_hexlic(license_obj["payload"])
     Path(OUTPUT_FILENAME).write_bytes(canonical_json(license_obj).encode())
