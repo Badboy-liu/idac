@@ -1,0 +1,24 @@
+{
+  "payload": {
+    "name": "Placeholder User",
+    "email": "user@example.invalid",
+    "licenses": [
+      {
+        "id": "00-0000-0000-00",
+        "owner": "Placeholder Owner <owner@example.invalid>",
+        "product_id": "IDAPRO",
+        "edition_id": "ida-pro",
+        "description": "license",
+        "start_date": "2024-01-01 00:00:00",
+        "end_date": "2099-12-31 23:59:59",
+        "issued_on": "2024-01-01 00:00:00",
+        "license_type": "named",
+        "seats": 1,
+        "add_ons": []
+      }
+    ]
+  },
+  "header": {
+    "version": 1
+  }
+}
