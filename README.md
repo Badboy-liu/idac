@@ -68,7 +68,8 @@ The C++ executable searches for the license template in this order:
 2. `data/licenses.json`
 3. `../data/licenses.json`
 
-It writes `idapro.hexlic` to the current working directory.
+It writes the generated license to `data/idapro.hexlic`, relative to the
+current working directory.
 
 ## Python Reference
 
